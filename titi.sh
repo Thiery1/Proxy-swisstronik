@@ -7,13 +7,10 @@ sleep 4
 sudo apt-get update && sudo apt get upgrade -y
 clear
 
-echo "Installing dependencies..."
+echo "Installing Hardhat and dotenv..."
 npm install --save-dev hardhat
 npm install dotenv
 npm install @swisstronik/utils
-npm install @openzeppelin/hardhat-upgrades
-npm install @openzeppelin/contracts
-npm install @nomicfoundation/hardhat-toolbox
 echo "Installation completed."
 
 echo "Creating a Hardhat project..."
@@ -36,11 +33,10 @@ echo ".env file created."
 echo "Configuring Hardhat..."
 cat <<EOL > hardhat.config.js
 require("@nomicfoundation/hardhat-toolbox");
-require('@openzeppelin/hardhat-upgrades');
 require("dotenv").config();
 
 module.exports = {
-  solidity: "0.8.20",
+  solidity: "0.8.19",
   networks: {
     swisstronik: {
       url: "https://json-rpc.testnet.swisstronik.com/",
@@ -60,7 +56,7 @@ pragma solidity ^0.8.19;
 contract Swisstronik {
     string private message;
 
-    function initialize(string memory _message) public {
+    constructor(string memory _message) payable {
         message = _message;
     }
 
@@ -82,37 +78,18 @@ echo "Contract compiled."
 echo "Creating deploy.js script..."
 mkdir -p scripts
 cat <<EOL > scripts/deploy.js
-const fs = require("fs");
+const hre = require("hardhat");
 
 async function main() {
-  const [deployer] = await ethers.getSigners();
-
-  console.log("Deploying contracts with the account:", deployer.address);
-
-  const Swisstronik = await ethers.getContractFactory('Swisstronik');
-  const swisstronik = await Swisstronik.deploy();
-  await swisstronik.waitForDeployment(); 
-  console.log('Non-proxy Swisstronik deployed to:', swisstronik.target);
-  fs.writeFileSync("contract.txt", swisstronik.target);
-
-  console.log(\`Deployment transaction hash: https://explorer-evm.testnet.swisstronik.com/address/\${swisstronik.target}\`);
-
-  console.log('');
-  
-  const upgradedSwisstronik = await upgrades.deployProxy(Swisstronik, ['Hello Swisstronik from Happy Cuan Airdrop!!'], { kind: 'transparent' });
-  await upgradedSwisstronik.waitForDeployment(); 
-  console.log('Proxy Swisstronik deployed to:', upgradedSwisstronik.target);
-  fs.writeFileSync("proxiedContract.txt", upgradedSwisstronik.target);
-
-  console.log(\`Deployment transaction hash: https://explorer-evm.testnet.swisstronik.com/address/\${upgradedSwisstronik.target}\`);
+  const contract = await hre.ethers.deployContract("Swisstronik", ["Hello Swisstronik from Happy Cuan Airdrop!!"]);
+  await contract.waitForDeployment();
+  console.log(\`Swisstronik contract deployed to \${contract.target}\`);
 }
 
-main()
-  .then(() => process.exit(0))
-  .catch((error) => {
-    console.error(error);
-    process.exit(1);
-  });
+main().catch((error) => {
+  console.error(error);
+  process.exitCode = 1;
+});
 EOL
 echo "deploy.js script created."
 
@@ -124,7 +101,6 @@ echo "Creating setMessage.js script..."
 cat <<EOL > scripts/setMessage.js
 const hre = require("hardhat");
 const { encryptDataField, decryptNodeResponse } = require("@swisstronik/utils");
-const fs = require("fs");
 
 const sendShieldedTransaction = async (signer, destination, data, value) => {
   const rpclink = hre.network.config.url;
@@ -138,7 +114,7 @@ const sendShieldedTransaction = async (signer, destination, data, value) => {
 };
 
 async function main() {
-  const contractAddress = fs.readFileSync("proxiedContract.txt", "utf8").trim();
+  const contractAddress = "0xf84Df872D385997aBc28E3f07A2E3cd707c9698a";
   const [signer] = await hre.ethers.getSigners();
   const contractFactory = await hre.ethers.getContractFactory("Swisstronik");
   const contract = contractFactory.attach(contractAddress);
@@ -164,7 +140,6 @@ echo "Creating getMessage.js script..."
 cat <<EOL > scripts/getMessage.js
 const hre = require("hardhat");
 const { encryptDataField, decryptNodeResponse } = require("@swisstronik/utils");
-const fs = require("fs");
 
 const sendShieldedQuery = async (provider, destination, data) => {
   const rpclink = hre.network.config.url;
@@ -177,7 +152,7 @@ const sendShieldedQuery = async (provider, destination, data) => {
 };
 
 async function main() {
-  const contractAddress = fs.readFileSync("proxiedContract.txt", "utf8").trim();
+  const contractAddress = "0xf84Df872D385997aBc28E3f07A2E3cd707c9698a";
   const [signer] = await hre.ethers.getSigners();
   const contractFactory = await hre.ethers.getContractFactory("Swisstronik");
   const contract = contractFactory.attach(contractAddress);
